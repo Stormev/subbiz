@@ -36,7 +36,7 @@ font_size = 40
 font_size = int(font_size * SCREEN_RATIO_MODIFICATION)
 main_font = pygame.font.Font(None, font_size)
 
-# окно
+# Окно
 screen = pygame.display.set_mode((WIDTH, HEIGHT), (pygame.FULLSCREEN if isFullScreen else pygame.NOFRAME))
 if isFullScreen:
     WIDTH, HEIGHT = screen.get_size()
