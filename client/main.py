@@ -15,7 +15,7 @@ user_monitor = (user32.GetSystemMetrics(0), user32.GetSystemMetrics(1))
 WIDTH, HEIGHT = user_monitor[0], user_monitor[1]
 
 # test
-#WIDTH, HEIGHT = 1600 × 900
+# WIDTH, HEIGHT = 1600 × 900
 
 # Стандартная разность между длиной и высотой
 # Для измениния объектов в соотношение размера экрана
