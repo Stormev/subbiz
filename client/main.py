@@ -1,4 +1,3 @@
-import ctypes
 import socket
 from threading import Thread
 import json
@@ -40,6 +39,8 @@ main_font = pygame.font.Font(None, font_size)
 screen = pygame.display.set_mode((WIDTH, HEIGHT), (pygame.FULLSCREEN if isFullScreen else pygame.NOFRAME))
 if isFullScreen:
     WIDTH, HEIGHT = screen.get_size()
+
+CLIENT = None
 
 
 # Загрузчик изображений
@@ -115,6 +116,8 @@ class Button(pygame.sprite.Sprite):
         self.func = func
 
         self.image_change(primary_image)
+
+    # image_change - функция, которая задаёт спрайту изображение, и выдаёт ему размер соответсвующий экрану пользователя
 
     def image_change(self, new_image):
         self.image = pygame.transform.scale(new_image, (
@@ -203,7 +206,8 @@ class ButtonEdit(pygame.sprite.Sprite):
 
 
 class InputBox(pygame.sprite.Sprite):
-    def __init__(self, display, pos=(0, 0), scale=1, text='', color=(255, 255, 255), text_dialog='Введите значение'):
+    def __init__(self, display, pos=(0, 0), scale=1, text='', text_tip='', dialog_limit_symbol=16,
+                 color=(255, 255, 255), text_dialog='Введите значение'):
         super().__init__()
         self.screen = display
         self.image = None
@@ -217,6 +221,9 @@ class InputBox(pygame.sprite.Sprite):
         self.text = text
         self.color = color
         self.text_dialog = text_dialog
+        self.text_tip = text_tip
+
+        self.dialog_limit = dialog_limit_symbol
 
     def update_model(self):
         img = loader_image('data/UI/input_box.png')
@@ -233,6 +240,8 @@ class InputBox(pygame.sprite.Sprite):
     def edit_text(self):
         code = prompt(text=self.text_dialog, title='')
         if code:
+            if len(code) >= self.dialog_limit:
+                code = code[:self.dialog_limit]
             self.text = code
 
     def get_rect(self):
@@ -251,35 +260,93 @@ class InputBox(pygame.sprite.Sprite):
 
         self.button_edit.draw()
         self.button_edit.update(events)
-        self.screen.blit(main_font.render(self.text, False, self.color),
-                         (self.position[0] + self.image.get_size()[0] // 10,
-                          self.position[1] + self.image.get_size()[1] // 2.3))
+
+        # Для текста подсказки
+        if self.text:
+            self.screen.blit(main_font.render(self.text, False, self.color),
+                             (self.position[0] + self.image.get_size()[0] // 14,
+                              self.position[1] + self.image.get_size()[1] // 2.3))
+        elif self.text_tip:
+            self.screen.blit(main_font.render(self.text_tip, False, (128, 128, 128)),
+                             (self.position[0] + self.image.get_size()[0] // 9,
+                              self.position[1] + self.image.get_size()[1] // 2.5))
+
+
+class Player:
+    def __init__(self, name):
+        self.name = name
+
+
+# Клиент для связи с сервером
+class Client:
+    def __init__(self, addr):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect(addr)
+
+        self.players = []
+        Thread(target=self.get_players).start()
+
+    def get_players(self):
+        while True:
+            self.sock.sendall(bytes(json.dumps({
+                'request': 'get_players'
+            }), "UTF-8"))
+
+            received = json.loads(self.sock.recv(1024).decode('UTF-8'))
+            self.players = received['response']
+
+    def get_connect_status(self):
+        self.sock.sendall('get_status')
+        return True if json.loads(self.sock.recv(1024).decode('UTF-8')) else False
 
 
 # Главное меню
 def start_screen():
+    def connect_server(address):
+        global CLIENT
+        split_adress = address.split(':')
+        if len(split_adress) == 2:
+            if not all(1 if i.isdigit() else 0 for i in split_adress[0].split('.')) and \
+                    not split_adress[0] == 'localhost':
+                print('Неверный формат хоста')
+                return
+            if not split_adress[1].isdigit():
+                print('Неверный формат порта')
+                return
+            try:
+                CLIENT = Client((split_adress[0], int(split_adress[1])))
+                print(CLIENT.get_connect_status())
+            except Exception as err:
+                print('Неверный адресс, либо сервер недоступен\n', err)
+        else:
+            print('Отсутствует порт')
+
     # Ассеты
     background = loader_image('data/UI/menu.png')
     background = pygame.transform.scale(background, (WIDTH, HEIGHT))
 
+    input_box_token = InputBox(screen, text='', scale=0.6, text_tip='IP адресс подключения')
+    input_box_name = InputBox(screen, text='', scale=0.5, text_tip='Ваc буду звать как ..', dialog_limit_symbol=10)
+
     button_connect = Button(screen, loader_image('data/UI/button_connect_false.png'),
                             image_inactive='data/UI/button_connect_false.png',
                             image_active='data/UI/button_connect_true.png',
-                            scale=0.7)
-    input_box = InputBox(screen, text='', scale=0.6)
-    label = Label(screen, text='dsadsadasd', pos=(100, 100))
+                            scale=0.7,
+                            func=lambda: connect_server(input_box_token.get_text()))
 
     pos_start_button = (WIDTH//2 - button_connect.get_size()[0]//2,
                         HEIGHT//1.12 - button_connect.get_size()[1]//2)
     button_connect.position = pos_start_button
-    pos_input_box = (WIDTH // 2 - input_box.get_size()[0] // 2,
-                       HEIGHT // 1.43 - input_box.get_size()[1] // 2)
-    input_box.position = pos_input_box
+    pos_input_box = (WIDTH // 2 - input_box_token.get_size()[0] // 2,
+                     HEIGHT // 1.43 - input_box_token.get_size()[1] // 2)
+
+    input_box_token.position = pos_input_box
+    input_box_name.position = (pos_input_box[0] * 1.055, pos_start_button[1] // 1.6)
 
     sprites = pygame.sprite.Group()
-    sprites.add(input_box)
+    sprites.add(input_box_token)
+    sprites.add(input_box_name)
     sprites.add(button_connect)
-    sprites.add(label)
 
     run = True
     while run:
@@ -294,7 +361,10 @@ def start_screen():
         sprites.update(events)
         pygame.display.flip()
 
+        clock.tick(60)
 
+
+# client = Client()
 start_screen()
 
 
